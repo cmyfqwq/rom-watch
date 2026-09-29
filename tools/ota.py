@@ -254,7 +254,11 @@ def find_port(required=False):
         for p in ports:                         # 老行为兜底：Windows 上默认 COM5 ✓
             if p["device"].upper() == "COM5":
                 return p["device"]
-        return "COM5"
+        # ★2026-09-30 修：原来这里**无条件**返回 "COM5" ✗ ——
+        #   对作者本人没问题（他机器上 COM5 就是那块板子 ✓），
+        #   但**别人机器上多半没有 COM5** ⇒ 拿着一个不存在的口去烧录 ⇒ 报错莫名其妙 ✗✓
+        #   ⇒ 现在只在"它真的存在"时才兜底（上面那个循环 ✓）；不存在就走下面的通用逻辑：
+        #     唯一一个串口直接用 ✓／多个列出来让你选 ✓／一个都没有才报错 ✓
 
     if len(ports) == 1:
         return ports[0]["device"]

@@ -120,10 +120,20 @@ OTA 口令/串口同理：`ROMWATCH_OTA_PASS` / `ROMWATCH_PORT` ✓
 
 ## 4. 常用端点（**注意：动作类端点都是 POST**，GET 会 404）
 
+★**新固件的几个新手向行为**（2026-09-30 加，源码核实过）：
+
+| 行为 | 在哪看 | 说明 |
+|---|---|---|
+| **屏上亮 2.6 秒 IP** | OLED（`oledReady()`） | 联网成功后屏上先画「已联网 + IP + 浏览器打开」，亮 **2.6 秒** ⇒ 新手不用翻串口日志找 IP ✓（`USE_OLED=0` 时是空动作，IP 照样打在串口） |
+| **开机日志多一行「下一步」** | 串口 | `→ 下一步：浏览器打开上面那个地址…`；没配数据源时还会多一句「→ 还没配数据源：打开网页 →「监测设置」…」 |
+| **WiFi 连不上时打印该查什么** | 串口 `[WIFI]` | ①名字/密码**大小写敏感** ②必须是 **2.4G**（ESP8266 不支持 5G）③信号太弱 |
+| **I2C 扫到"另一个 OLED 地址"** | 串口 `[I2C]` ＋ `/rom` 的 **`oledHint`** | 模块是 `0x3D` 而固件配 `0x3C` ⇒ 现象是**屏全黑**；这里直接告诉你改哪一行 |
+| **没配数据源 ≠ 检查中** | OLED ＋ 网页 | 屏上显示「**请配数据源**」；网页顶部跳一条「**先做这三步**」引导条，**配好自动消失** |
+
 | 端点 | 方法 | 干什么 |
 |---|---|---|
 | `/` | GET | 网页看板（手机/电脑/电视都能开） |
-| `/rom` | GET | 状态 JSON（网页每 5 秒拉一次；也方便脚本读）★含 `led`（**回读引脚真实电平**）/`ledAlarm`/`seen`/`found`/`scrMin`（屏上画的是第几分钟）/`scrUp` |
+| `/rom` | GET | 状态 JSON（网页每 5 秒拉一次；也方便脚本读）★含 `led`（**回读引脚真实电平**）/`ledAlarm`/`seen`/`found`/`scrMin`（屏上画的是第几分钟）/`scrUp`/**`oledHint`（★新：扫到的"另一个 OLED 地址"，非 0 就是地址配错了 ⇒ 见上表）** |
 | `/status` `/ping` `/log` | GET | 设备信息 / 存活探测 / 纯文本日志 |
 | `/ack` `/skip` `/check` | **POST** | 我已刷 / 跳过这版 / 立即检查（`/check` 0.3.0 起秒回 ✓） |
 | `/seen` | **POST** | ★**「我知道了（关灯）」** —— **不动水位线**、页面照旧显示"有新版本"，只把灯摁灭；`?clear=1` 撤销 ✓ |
@@ -143,9 +153,13 @@ OTA 口令/串口同理：`ROMWATCH_OTA_PASS` / `ROMWATCH_PORT` ✓
 
 | 现象 | 先看这里 |
 |---|---|
-| 网页打不开 | 板子还在不在网：`python tools\ota.py find`；串口日志：`python tools\ota.py serial` |
+| 网页打不开 | 板子还在不在网：`python tools\ota.py find`；串口日志：`python tools\ota.py serial`；★开机屏上会亮 2.6 秒 IP ✓ |
+| OLED 全黑 | ①`/i2c` 扫总线 ②地址只有 `0x3C`/`0x3D` 两种 ③`/rom` 的 **`oledHint`** 非 0 ⇒ 它就是真实地址，改 `config.h` 的 `OLED_ADDR` 即可 |
+| 改了标题屏上是空方框 | 新字要写进 `firmware\rom-watch\cn_extra.txt` → 重跑取模 → **重新编译上传**（网页改标题不影响屏上的字模 ✓） |
+| WiFi 连不上 | ①名字/密码**大小写敏感** ②必须 **2.4G**（不支持 5G）③信号太弱 —— 三条开机日志里都打了 |
+| 串口找不到 / 不确定哪个口 | `python tools\ota.py ports` 列出来；`flash.ps1` 会按 CH340/CP210x/FT232 打分排序。⚠️ 注意 `ota.py` 的 `find_port()` 在 Windows 上**兜底会直接返回 `COM5`**（哪怕它不存在）⇒ 拿不准就用 `-Port` / `ROMWATCH_PORT` 显式指定 ✓ |
 | 屏上没反应 / 字段不变 | ①`/rom` 里 `tjcOk` 是不是 false ②`/tjcwire`（短接 D5-D7）分清板子和屏 ③`/tjcsweep` 试波特率 ④**屏的 sendxy 每次上电都会重置**，固件开机自动重发 ✓ |
-| 编译报 IRAM 超了 | `python tools\build_matrix.py` 看哪个开关能关；或砍功能 |
+| 编译报 IRAM 超了 | `python tools\build_matrix.py` 看哪个开关能关；或砍功能（⚠️ 关开关腾不出多少 IRAM，天花板 94~96%） |
 | 板子反复重启 | `/log` 看「上次跑到阶段」＋启动次数（黑匣子，RTC 内存） |
 | 抓到的时间不对 | `/log` 看「校时」；没 NTP 时显示的是"开机计时" |
 | 网页数字不刷新 | 页面每 5 秒拉 `/rom`；按 F12 看是不是 fetch 失败（跨网段/代理） |
@@ -156,6 +170,13 @@ OTA 口令/串口同理：`ROMWATCH_OTA_PASS` / `ROMWATCH_PORT` ✓
 
 ```powershell
 cd <仓库>\serial-screen
+pwsh -File tools\setup.ps1                      # ★新手第一步：装环境 + 编译一遍（不碰板子）
+pwsh -File tools\flash.ps1                      # ★编译 + 烧录（串口自动探测，按 CH340/CP210x/FT232 打分排序）
+pwsh -File tools\flash.ps1 -Ota                 # 不插线，走无线 OTA（转调 ota.py push）
+pwsh -File tools\flash.ps1 -Port COM5           # 有多个串口时自己指定
+pwsh -File tools\flash.ps1 -Monitor             # 烧完看串口日志（找板子 IP）
+python tools\make_config.py                     # ★配置向导：交互式生成 firmware\rom-watch\config.h（覆盖前自动备份）
+python tools\ota.py ports                       # ★列出系统串口（只读；串口找不到先跑它）
 python tools\ota.py push --sketch rom-watch     # 编译 + OTA 推 + 自动校验（日常就这条）
 python tools\ota.py status                      # 看板子 /status
 python tools\ota.py serial --sec 20             # 看串口日志
@@ -165,3 +186,6 @@ python serial-screen\tools\verify_hmi.py <工程.HMI>  # 屏工程自检
 node qwq\_esp_preview.cjs                       # 网页本地预览出图（假的 /rom 数据）
 node qwq\_esp_verify.cjs                        # 真机验收：连拉整页测堆 + DOM 断言 + 截图
 ```
+
+> `setup.ps1` / `flash.ps1` 都支持 `-Sketch`（默认 `rom-watch`）与 `-Fqbn`（默认 `esp8266:esp8266:d1_mini`，也可用环境变量 `ROMWATCH_FQBN`）；
+> `flash.ps1` 另支持 `-Port` / `-Ota` / `-Monitor`，`setup.ps1` 另支持 `-SkipCompile` / `-Help`（两个脚本都有 `-Help`）。

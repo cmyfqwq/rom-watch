@@ -1,0 +1,20 @@
+# .editorconfig —— 统一编码与换行（2026-09-30 加）
+#
+# ★★ `*.ps1` 必须带 UTF-8 BOM ✗✓
+#   原因：**Windows PowerShell 5.1 会把"无 BOM 的 UTF-8 .ps1"当成 ANSI(GBK) 读** ⇒
+#        中文注释/字符串变乱码 ⇒ **引号配对错乱 ⇒ 直接语法崩溃**（一次报 30+ 个 Unexpected token ✗）
+#   pwsh 7 两种都能读，但 5.1 必须带 BOM ✓ —— 所以本仓库的 .ps1 一律存成 `utf-8-bom` ✓
+#   （2026-09-30 实测：`tools/flash.ps1` 被编辑器/工具重写后丢了 BOM ⇒ 5.1 下解析失败 ✗）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.ps1]
+charset = utf-8-bom
+
+[*.md]
+trim_trailing_whitespace = false

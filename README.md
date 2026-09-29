@@ -60,6 +60,45 @@
 
 **你需要**：WeMos D1 mini（或任意 ESP8266 开发板）＋ 0.96" I2C OLED（SSD1306/SSD1315，地址 0x3C）＋ 一根 USB 线。
 
+**★推荐路线（脚本优先，新手就走这条）** —— 三条脚本命令，不用懂 `arduino-cli`：
+
+```powershell
+# ⓪ 拿代码（在 <仓库路径>\serial-screen 下操作）
+git clone https://github.com/cmyfqwq/rom-watch.git
+cd rom-watch
+
+# ① 配自己的值（★必做 —— 仓库里只有样板，没有任何私有信息）
+python tools\make_config.py          # 交互式向导：问几个问题 ⇒ 直接生成 config.h
+
+# ② 装环境（一条命令：找 arduino-cli → 装 esp8266 core → 装 OLED 库 → 查 config.h → 编译）
+pwsh -File tools\setup.ps1
+
+# ③ 编译 + 烧录（插上 USB；串口自动探测，按 CH340/CP210x/FT232 打分排序）
+pwsh -File tools\flash.ps1
+
+# ④ 不想插线？板子已在网上就走无线 OTA
+pwsh -File tools\flash.ps1 -Ota
+```
+
+> 老版 Windows PowerShell 也能跑：把 `pwsh` 换成 `powershell` ✓
+> 环境还没装过？`setup.ps1` 会自动把 core / 库装到仓库内的 `tools\` 下（**不污染你系统里的 Arduino 环境**，删掉 `tools\` 就等于卸载干净）。
+> 它**只装环境 + 编译，不碰板子**；只有 `flash.ps1` 的第 4 步才需要插 USB ✓
+
+**脚本参数**（拿不准就先 `-Help`，两个脚本都支持）：
+
+| 脚本 | 参数 | 干什么 |
+|---|---|---|
+| `setup.ps1` | `-Sketch` | 固件工程名，默认 `rom-watch` |
+| | `-Fqbn` | 板型，默认 `esp8266:esp8266:d1_mini` |
+| | `-SkipCompile` | 只装环境，先不编译 |
+| `flash.ps1` | `-Sketch` / `-Fqbn` | 同上 |
+| | `-Port` | 串口（例 `COM5`）；不给就自动探测 |
+| | `-Ota` | 走无线 OTA（转调 `tools\ota.py push`） |
+| | `-Monitor` | 烧完打开串口监视器（找板子 IP） |
+
+<details>
+<summary><b>不想用脚本？手动命令在这（原来那 4 步）</b></summary>
+
 ```bash
 # ① 拿代码
 git clone https://github.com/cmyfqwq/rom-watch.git
@@ -79,10 +118,16 @@ arduino-cli compile --fqbn esp8266:esp8266:d1_mini firmware/rom-watch
 arduino-cli upload  --fqbn esp8266:esp8266:d1_mini -p <你的串口> firmware/rom-watch
 ```
 
-**接上电之后**：浏览器打开板子的 IP（串口日志里会打印），在「**监测设置**」里填服务器和目录 → 保存 → 点「**立即检查**」。
+</details>
+
+**接上电之后**：★**屏上会先亮 2.6 秒板子的 IP** —— 不用翻串口日志找地址 ✓（串口日志里同样会打印，并多一行「→ 下一步：浏览器打开上面那个地址」）。
+浏览器打开那个 IP（就是日志/屏上那个 `http://…`，**不要照抄别人的例子** ✗），在「**监测设置**」里填服务器和目录 → 保存 → 点「**立即检查**」。
 网盘（OpenList/alist）用预设 `0`；想盯某个 GitHub 仓库就选预设 `1`，填 `OWNER/REPO`。
 
+> ⚠️ **还没配数据源时**：屏上会显示「**请配数据源**」（不再显示"检查中"），网页顶部会跳一条「**先做这三步**」的引导条 —— 配好之后它自动消失 ✓
+
 > 网页里点「**怎么用（3 步）**」有一份写给非程序员看的说明 ✓
+> ★**完全不懂嵌入式？看这份图文教程** → [docs/新手起步.md](docs/新手起步.md)（配 [接线图](docs/接线图.svg)）
 
 ---
 
@@ -115,7 +160,7 @@ arduino-cli upload  --fqbn esp8266:esp8266:d1_mini -p <你的串口> firmware/ro
 | `OLED_SMALL` | `0` | 设 `1` ⇒ **128×32 小屏（0.91"）**，版面自动换成两行 |
 | `PIN_TJC_RX` / `PIN_TJC_TX` | `D5` / `D7` | 换串口屏接线（★别用 D6） |
 | `PIN_LED` / `PIN_BTN` | `LED_BUILTIN` / `D3` | 换板子 |
-| `DFLT_TITLE` | `系统包监测` | **网页 / OLED / 串口屏三处共用的标题**（网页上也能随时改）★含新字要加进 `cn_extra.txt` 再重跑取模脚本 |
+| `DFLT_TITLE` | `系统包监测` | **网页 / OLED / 串口屏三处共用的标题**（网页上也能随时改）★含新字要加进 `cn_extra.txt` 再重跑取模脚本（`gen_cn_font.ps1`），然后重新编译上传 |
 | `DFLT_HOST` / `DFLT_PATH` | 空 | 第一次开机的默认数据源（**留空是合法的**，固件会提示"还没配数据源"） |
 | `OTA_PASSWORD` | 源码里的公开默认值 | ★**必须改** —— 写进 `config.h`，`tools/ota.py` 会**自动读它** |
 
@@ -178,15 +223,18 @@ python tools/build_matrix.py          # 一键跑上表全部配置，自己看�
 
 | 现象 | 先看这里 |
 |---|---|
-| **网页打不开** | 板子还在不在网？看串口日志里的 IP；AP 模式下面板在 `192.168.4.1` |
-| **OLED 不亮 / 花屏** | `/i2c` 扫得到 `0x3C` 吗？扫不到就是接线/地址问题（试试 `OLED_ADDR=0x3D`） |
+| **网页打不开** | 板子还在不在网？看串口日志里的 IP（开机屏上也会亮 2.6 秒 IP ✓）；AP 模式下面板在 `192.168.4.1` |
+| **OLED 全黑（一点不亮）** | ①先 `GET /i2c` 扫总线，看屏在不在；②地址只有 `0x3C` / `0x3D` 两种 —— 模块是 `0x3D` 而固件配的是 `0x3C` 时**现象就是全黑**；③读 `/rom` 的 **`oledHint`** 字段：非 0 就是它扫到的**真实地址**，把它写进 `config.h` 的 `#define OLED_ADDR 0x3D` 就亮 ✓ |
+| **OLED 不亮 / 花屏** | 同上：`/i2c` 扫得到 `0x3C` 吗？扫不到就是接线问题（SDA=D2 / SCL=D1 / 3V3 / GND） |
 | **屏上字缺笔画** | 字模是从源码里的汉字自动生成的 ⇒ 你在源码里加了新汉字，**要重跑取模脚本** |
-| **改了标题、屏上是空方框** | 标题的字必须在**字模表**里 ⇒ 把新字写进 `firmware/rom-watch/cn_extra.txt`，再跑 `gen_cn_font.ps1`，然后重编上传 |
+| **改了标题、屏上是空方框** | 标题的字必须在**字模表**里 ⇒ 把新字写进 `firmware/rom-watch/cn_extra.txt`，再跑 `gen_cn_font.ps1`，然后重编上传（改完标题**必须重新编译上传**，网页上改不了） |
+| **串口屏接 D6 起不来** | ★**绝对不要**把串口屏接到 **D6（GPIO12）** —— 那是 ESP8266 **开机时判断 flash 电压**的脚，被串口占着可能直接**起不来**。串口屏只用 D5/D7 |
+| **WiFi 连不上** | ①**名字/密码大小写敏感**（差一个字母就连不上）；②**必须是 2.4G** —— ESP8266 **不支持 5G**；③板子离路由器近一点（信号太弱也连不上）。三条都会在开机串口日志里打出来 ✓ |
 | **数据源一直失败** | `/rom` 的 `lastErr` 和「调试：最近响应片段」会直接告诉你原因 |
-| **GitHub 预设抓不到** | 必须带 User-Agent（固件已带 ✓）；未登录**限流 60 次/小时/IP** ⇒ 间隔别小于 10 分钟 |
+| **GitHub 预设抓不到** | 必须带 User-Agent（固件已带 ✓）；未登录**限流 60 次/小时/IP** ⇒ 轮询间隔 ≥10 分钟（600 秒）。反复手点「立即检查」也可能撞上 403/429 |
 | **抓到的时间不对** | `/log` 看校时；没 NTP 时显示的是"开机计时" |
-| **板子反复重启** | `/log` 看「上次跑到阶段」＋启动次数（启动黑匣子存在 RTC 内存里，异常重启也不丢） |
-| **IRAM 超了编不过** | 跑 `python tools/build_matrix.py`，把用不到的开关关掉 |
+| **板子反复重启** | `/log` 看「**上次跑到阶段**」＋启动次数（启动黑匣子存在 RTC 内存里，异常重启也不丢）。刷固件时反复连不上 ⇒ 按住板上 FLASH 键再点上传 |
+| **IRAM 超了编不过** | 跑 `python tools/build_matrix.py`，把用不到的开关关掉（`-DUSE_TJC=0` / `-DUSE_OLED=0`）。⚠️ 但关开关腾不出多少 IRAM（天花板就在 94~96%），想加功能得换 ESP32-C3 |
 
 ---
 
@@ -194,7 +242,10 @@ python tools/build_matrix.py          # 一键跑上表全部配置，自己看�
 
 | 工具 | 干什么 |
 |---|---|
-| `ota.py` | 一键 **编译 + 无线推送(OTA) + 校验**；也能 `find` 找板子、`serial` 看日志、`rescue` 串口兜底 |
+| `setup.ps1` | ★**新手第一步**：找 `arduino-cli` → 装 esp8266 core → 装 OLED 库 → 查 `config.h` → 编译一遍（**不碰板子**） |
+| `flash.ps1` | ★**编译 + 烧录**：串口自动探测（按 CH340/CP210x/FT232 打分排序）；`-Ota` 走无线、`-Monitor` 看日志 |
+| `make_config.py` | ★**配置向导**：交互式问几个问题 ⇒ 直接生成 `firmware\rom-watch\config.h`（WiFi / 数据源 / 标题 / 屏幕尺寸 / 随机 OTA 口令），覆盖前自动备份 |
+| `ota.py` | 一键 **编译 + 无线推送(OTA) + 校验**；也能 `find` 找板子、`serial` 看日志、`rescue` 串口兜底；★`ota.py ports` 列出系统串口（只读，排查串口问题先跑它） |
 | `build_matrix.py` | 六配置编译矩阵，打印 RAM/IRAM/Flash 对比 |
 | `check_publish.py` | **发布前自检**：算出哪些文件会被提交 ＋ 扫私有信息（PASS/FAIL 退出码） |
 
