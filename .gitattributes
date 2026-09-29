@@ -1,0 +1,13 @@
+# 统一换行符：仓库里存 LF，检出时按平台（Windows 得 CRLF）——
+# 免得"每个文件都显示被改过"那种假 diff ✓
+* text=auto
+
+# 二进制：别做任何换行/编码转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.bin  binary
+*.elf  binary
+*.map  binary

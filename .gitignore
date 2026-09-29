@@ -1,0 +1,97 @@
+# ============================================================================
+# .gitignore —— serial-screen（TJC 串口屏 + ESP8266 rom-watch）
+# 2026-09-30 建立：作者说「记得我这个项目要开源的」⇒ 这份清单保证
+#   **私有凭据 / 厂商版权产物 / 编译产物 / 一次性调试垃圾都不进仓库** ✓
+#
+# 说明：本文件只影响 git 收录，**不删本机任何文件** ✓（作者的原始文件原样都在 ✓）
+# 自检：`python tools/check_publish.py` 会用**真 git 的 ignore 语义**复算一遍 ✓
+# ============================================================================
+
+# ---- 本机私有配置（仓库只收 example，本人的 config.h 永不入库 ✓）----
+firmware/rom-watch/config.h
+firmware/*/config.h
+!firmware/rom-watch/config.example.h
+tools/.publish-secrets.txt
+
+# ---- 编译产物（★.bin 里是明文私有值：域名/路径/WiFi 凭据 ⇒ 绝不能入库 ✗）----
+firmware/build/
+firmware/build-matrix/
+*.elf
+*.map
+*.bin
+*.hex
+*.txe
+firmware/ota-state.json
+# ★构建时间戳头（每次编译都变 ⇒ 提交它只会天天产生无意义 diff ✗）
+firmware/*/fw_build.h
+
+# ---- 厂商文档整理稿（含厂商原文 + 本机实测 IP，待确认能否公开 ⇒ 先不进仓库 ✓）----
+tjc-ui-manual.md
+tjc-ui-manual.md.bak-pre-align
+
+# ---- 厂商 / 第三方版权产物（不能随仓库分发 ✗）----
+USARTHMI/
+USARTHMIsetup_*.exe
+USARTHMIsetup_*.zip
+tools/arduino15/
+tools/Arduino/
+tools/arduino-cli/
+tools/arduino-cli.zip
+tools/extracted/
+tools/exported/
+tools/pa_samples/
+backup/
+*.pdf
+*.HMI
+*.hmi
+*.tft
+*.page
+
+# ---- 一次性逆向探针 / 试验产物（多数写死了个人绝对路径 ✗）----
+tools/_*.py
+tools/gen_*.HMI
+tools/ui*.HMI
+tools/pages*.HMI
+tools/pst.HMI
+tools/sample*.HMI
+tools/_editor_output.HMI
+tools/hmi_dump.txt
+tools/crack_*.py
+tools/hmi_probe*.py
+tools/exp_page_at0.py
+tools/build_v*.py
+tools/build_test*.py
+tools/gen_test.py
+tools/generate_wallpaper.py
+
+# ---- 快照 / 备份（.bak-* 里含旧版明文凭据 ✗）----
+*.bak
+*.bak-*
+*.keep
+
+# ---- 调试取证素材 / 安装日志 ----
+# ★2026-09-30 改（独立审计发现"忽略逻辑是反的"✗）：
+#   原来只挡 `*_small.jpg`/`*_mid.jpg`（缩略图），**全尺寸原图照样放行** ✗ ——
+#   而根目录那几张 .png 正是最危险的（桌面全屏截图里带会话列表/PID/个人壁纸 ✗）。
+#   现在改成**按类别**挡：根目录下的图片一律不进仓库 ✓；仓库自己要用的配图放 `docs/` ✓
+gui/
+projects/
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.gif
+crop_*.jpg
+assets/wallpaper_*
+msi-install*.log
+msi_dump/
+
+# ---- Python 缓存 ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- 系统垃圾 ----
+Thumbs.db
+desktop.ini
+.DS_Store
