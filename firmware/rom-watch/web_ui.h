@@ -53,7 +53,7 @@ static const char UI_HEAD[] PROGMEM = R"HTMLUI(<!doctype html>
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0b1020">
 <meta name="description" content="rom-watch · 系统包更新监测面板">
-<title>rom-watch · 系统包监测</title>
+<title>rom-watch</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1020'/%3E%3Cpath d='M9 22V10h6.4a4 4 0 010 8H9' stroke='%235eead4' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='23' cy='22' r='2' fill='%235eead4'/%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box}
@@ -299,7 +299,7 @@ static const char UI_BODY[] PROGMEM = R"HTMLBODY(
   <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4.5 18V6.5h5.6a3.2 3.2 0 010 6.4H4.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><circle cx="17.6" cy="17.4" r="1.7" fill="currentColor"/><path d="M17.6 12.4a4.6 4.6 0 014.6 4.6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" opacity=".5"/></svg></div>
   <div class="bar-txt">
     <h1>rom-watch</h1>
-    <p class="sub" id="brandSub">系统包监测</p>
+    <p class="sub" id="brandSub">读取中…</p>
   </div>
   <div class="live" id="live" role="status" aria-live="polite"><span class="dot"></span><span id="liveTxt">连接中…</span></div>
 </header>

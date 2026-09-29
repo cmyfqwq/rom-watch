@@ -62,6 +62,13 @@
 #ifndef DFLT_INTERVAL
 #define DFLT_INTERVAL 600                  // 轮询秒（网页最小 60 ✓）
 #endif
+#ifndef DFLT_TITLE
+/* ★2026-09-30（主人：「开源的我觉得这个系统包监测这几个字应该能让人改」）：
+ *   网页 / OLED / 串口屏**三处共用的标题**，在这里可配 ✓（网页「监测设置 → 标题」也能随时改 ✓）
+ *   ⚠️ **标题里的每个字都必须在字模表里**，否则屏上会画成**空方框** ✗
+ *     ⇒ 换了标题、里面有新字，就把那些字写进 `cn_extra.txt` 再重跑 `qwq\gen_cn_font.ps1` ✓✓ */
+#define DFLT_TITLE  "系统包监测"
+#endif
 
 /* ---- 硬件适配：接线 / 显示屏 / 按键（都有默认值，不改也能跑 ✓）---- */
 #ifndef PIN_OLED_SDA
@@ -645,12 +652,12 @@ void extLoad() {
     memset(&ext, 0, sizeof(ext));
     ext.magic = EXT_MAGIC;
     extApplyPreset(PRESET_OPENLIST);
-    strncpy(ext.title, "系统包监测", sizeof(ext.title) - 1);   // ★字模里有这几个字 ✓（自定义标题需重跑取模脚本）
+    strncpy(ext.title, DFLT_TITLE, sizeof(ext.title) - 1);   // ★可配（见适配层 DFLT_TITLE ✓；字模要有这几个字 ✓）
     extSave();
     Serial.println("[EXT] 新建数据源配置（默认 OpenList 预设 ✓）");
   }
   if (ext.preset > PRESET_CUSTOM) ext.preset = PRESET_OPENLIST;
-  if (ext.title[0] == 0) strncpy(ext.title, "系统包监测", sizeof(ext.title) - 1);
+  if (ext.title[0] == 0) strncpy(ext.title, DFLT_TITLE, sizeof(ext.title) - 1);
 }
 
 /* ★2026-09-29：**灯与页面分开判断** ——
