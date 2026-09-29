@@ -1,0 +1,36 @@
+name: 💡 功能建议
+description: 想要新功能 / 想让它支持别的硬件
+title: "[建议] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: 你想要什么？
+      placeholder: 比如"想让它支持 ST7789 那种彩屏" / "想加个 Telegram 通知"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: 为什么需要它？（你想用它解决什么问题）
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 属于哪一类
+      options:
+        - 数据源（又多一种网盘 / 又一个 API）
+        - 显示（换屏 / 换分辨率 / 改版面）
+        - 通知（别的提醒方式）
+        - 硬件适配（换板子 / 换引脚）
+        - 其他
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        > 💡 小提示：这个项目有个「适配层」——**接线 / 屏幕尺寸 / 板型 / 数据源 / 标题 / 口令
+        > 都只改 `config.h` 一个文件**，主文件不用动。如果你的需求属于"换个硬件就能用"，
+        > 说不定现在就能做，看看 [docs/接线与适配.md](https://github.com/cmyfqwq/rom-watch/blob/main/docs/接线与适配.md) ✓

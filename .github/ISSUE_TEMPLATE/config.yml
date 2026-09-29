@@ -1,0 +1,10 @@
+# Issue 模板配置
+# 关掉"空白 issue"⇒ 走模板，这样那条"别贴私有信息"的提醒一定能被看到 ✓
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 先看文档（接线 / 配置 / 常见问题）
+    url: https://github.com/cmyfqwq/rom-watch#常见问题
+    about: "「不亮灯 / 连不上 / 抓不到 / 屏不对」这类问题，文档里基本都有对号入座"
+  - name: 🔌 接线与适配（换板子 / 换屏 / 换数据源）
+    url: https://github.com/cmyfqwq/rom-watch/blob/main/docs/接线与适配.md
+    about: 接线表、D6 禁令、适配层每个宏的默认值与改法、排错清单

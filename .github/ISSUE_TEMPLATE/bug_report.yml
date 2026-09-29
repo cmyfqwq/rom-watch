@@ -1,0 +1,86 @@
+name: 🐞 Bug 报告
+description: 有东西不工作（不亮灯 / 连不上 / 抓不到 / 屏幕不对）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### ⚠️ 贴之前先看一眼：别把私有信息带上来
+        `/rom` 和 `/log` 的原始输出里**含有你的服务器地址和目录路径**，可能还有 WiFi 名。
+        贴之前请把它们换成占位符（如 `alist.example.com` / `/public/roms` / `MyWiFi`），
+        **更不要把 OTA 口令、WiFi 密码贴出来** ✗
+  - type: input
+    id: ver
+    attributes:
+      label: 固件版本
+      description: 看 `/status` 返回的 `ver` 和 `build`
+      placeholder: "ver 0.3.1  build 260930-014412"
+    validations:
+      required: true
+  - type: dropdown
+    id: board
+    attributes:
+      label: 板子
+      options:
+        - WeMos D1 mini
+        - NodeMCU
+        - 其他 ESP8266 开发板
+        - 还没烧进去 / 编译就失败了
+    validations:
+      required: true
+  - type: dropdown
+    id: display
+    attributes:
+      label: 显示部分
+      options:
+        - 0.96" OLED（128x64）
+        - 0.91" OLED（128x32，OLED_SMALL=1）
+        - 没有 OLED（USE_OLED=0）
+        - 外挂 TJC / 淘晶驰 串口屏
+        - 不涉及显示
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: 数据源预设
+      options:
+        - OpenList 目录（预设 0）
+        - GitHub Release（预设 1）
+        - 自定义 JSON（预设 2）
+        - 还没配数据源
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 出了什么事？你期望的是什么？
+      placeholder: |
+        现象：网页一直显示"检查中"，`/rom` 的 lastErr 是 ……
+        期望：应该在 10 分钟内抓到 v4.0.25
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 烧录后打开网页
+        2. 在「监测设置」里填 ……
+        3. 点「立即检查」
+  - type: textarea
+    id: logs
+    attributes:
+      label: 关键信息（**已去掉私有内容**）
+      description: 建议贴：`/status` 全文、`/rom` 里的 `lastErr` 与「调试：最近响应片段」、`/log` 里"上次跑到阶段"那几行
+      render: text
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我已经把输出里的服务器地址 / 目录 / WiFi 名 / 口令换成了占位符
+          required: true
+        - label: 我读过 README 的「常见问题」和 docs/接线与适配.md
+          required: true
