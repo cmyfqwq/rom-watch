@@ -1056,6 +1056,10 @@ static const char* phName(uint8_t ph) {
 }
 
 static bool stOled = false, stI2c = false, stBtn = false, stCfg = false, stNet = false;
+/* ★2026-09-30（新手向）：扫总线时发现的"另一个 OLED 地址"（0x3C / 0x3D）——
+ *   非 0 ⇒ 说明**模块地址和固件配的不一样** ⇒ 表现是"屏全黑" ✗，而新手完全想不到是地址问题 ✗
+ *   ⇒ 开机直接在串口报出来，/rom 的 oledHint 也能看到 ✓ */
+static uint8_t oledHintAddr = 0;
 
 #if USE_OLED
 static void stDraw() {
@@ -1094,10 +1098,20 @@ void bootSelfTest() {                      // 在 setup 里、连 WiFi 之前调
   stOled = true;                           // 能画出来就说明屏没问题 ✓
   stCfg  = (mon.magic == MON_MAGIC);
   stI2c  = false;
-  for (uint8_t a = 0x03; a < 0x78; a++) {  // 扫总线确认 OLED 在
+  oledHintAddr = 0;
+  for (uint8_t a = 0x03; a < 0x78; a++) {  // 扫总线确认 OLED 在（顺便看地址对不对 ✓）
     Wire.beginTransmission(a);
-    if (Wire.endTransmission() == 0 && a == 0x3C) { stI2c = true; break; }
+    if (Wire.endTransmission() != 0) continue;
+    if (a == OLED_ADDR) { stI2c = true; break; }   // 固件配的那个地址在 ⇒ 正常 ✓
+    if (a == 0x3C || a == 0x3D) oledHintAddr = a;  // 另一个 OLED 地址在 ⇒ 记下来提示 ✓
   }
+  /* ★2026-09-30（新手向）：OLED 模块有 0x3C / 0x3D 两种地址。
+   *   接的是 0x3D 而固件按 0x3C 初始化时，现象就是"屏一点不亮" ✗
+   *   ⇒ 这里直接告诉新手"改哪一行就行" ✓✓ */
+  if (!stI2c && oledHintAddr)
+    Serial.printf("[I2C] ★检测到 OLED 在 0x%02X，但固件配的是 0x%02X ⇒ "
+                  "把 config.h 里 `#define OLED_ADDR 0x%02X` 改一下就能亮 ✓\n",
+                  oledHintAddr, OLED_ADDR, oledHintAddr);
   bbPhase(PH_WIRE);
   pinMode(BTN_PIN, INPUT_PULLUP);
   stBtn = (digitalRead(BTN_PIN) == HIGH);  // 没被按住算正常
@@ -1170,6 +1184,27 @@ static String agoText(unsigned long sec) {   // 把"多少秒前"变成 12s / 5m
 }
 
 #if USE_OLED
+/* ★2026-09-30（新手向）：联网成功后**在屏上亮几秒 IP** ——
+ *   新手最常见的卡点就是"板子 IP 是多少"（原来只能翻串口日志 ✗，好多人根本不知道去哪看 ✓）*/
+void oledReady() {
+  oled.clear();
+  oled.setTextAlignment(TEXT_ALIGN_LEFT);
+#if OLED_SMALL
+  uiText(0, 0, "已联网");
+  oled.setFont(ArialMT_Plain_16);
+  oled.drawString(0, 16, WiFi.localIP().toString());
+#else
+  uiText(0, 0, "已联网");
+  /* ★用 16px 不是 24px：IP 有 15 个字符（13 位数字 + 2 个点）——
+   *   24px 下宽约 180px ✗ 会超出 128 的屏；16px 下约 125px ✓ 刚好放得下 ✓ */
+  oled.setFont(ArialMT_Plain_16);
+  oled.drawString(0, 20, WiFi.localIP().toString());
+  uiText(0, 48, "浏览器打开");
+#endif
+  oled.display();
+  delay(2600);
+}
+
 void oledUpdate() {                       // 把"最新版本 / 有没有新包 / 上传时间"画到 OLED 上
   oled.clear();
   oled.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1183,7 +1218,9 @@ void oledUpdate() {                       // 把"最新版本 / 有没有新包 
   oled.setTextAlignment(TEXT_ALIGN_LEFT);
   oled.drawString(0, 16, String(ver));
   bool netOk = (WiFi.status() == WL_CONNECTED);
-  const char* st = !netOk ? "离线" : (hasNew() ? "有新版本" : (mon.latest[0] ? "已是最新" : "检查中"));
+  /* ★2026-09-30（新手向）：没配数据源时**别显示"检查中"**（会让人以为它在干活 ✗）⇒ 直接说该干什么 ✓ */
+  const char* st = !netOk ? "离线" : (hasNew() ? "有新版本"
+                  : (!mon.host[0] ? "请配数据源" : (mon.latest[0] ? "已是最新" : "检查中")));
   /* 状态字**只在真放得下时才画** —— 版本号长度会变（v4.0.25 / 3.1.2 / …）⇒ 必须先算再画 ✓
    * （小屏上宁可不显示状态，也不能两段字撞成一坨 ✗ —— 这就是 9-25 那次"乱码"的教训 ✓）*/
   if ((int)oled.getStringWidth(String(ver)) + 6 + uiStrW16(st) <= 128) {
@@ -1208,6 +1245,7 @@ void oledUpdate() {                       // 把"最新版本 / 有没有新包 
   bool netOk = (WiFi.status() == WL_CONNECTED);
   if (!netOk)                                        uiText(0, 48, "离线");
   else if (hasNew())                                 uiText(0, 48, "有新版本");
+  else if (!mon.host[0])                             uiText(0, 48, "请配数据源");  // ★新手引导（见 2026-09-30 注）
   else if (mon.latest[0])                            uiText(0, 48, "已是最新");
   else                                               uiText(0, 48, "检查中");
 
@@ -1232,6 +1270,7 @@ void oledUpdate() {                       // 把"最新版本 / 有没有新包 
 }
 #else
 void oledUpdate() { }                     // 没有 OLED：状态页这件事不存在 ✓（状态照样在网页/屏上 ✓）
+void oledReady()  { }                     // ★同上：没屏就不亮 IP 页 ✓（IP 照样打在串口日志里 ✓）
 #endif /* USE_OLED */
 
 /* ===== 检测历史（①）：最近 6 次，存 EEPROM 512 起（老配置在 0~427 ✓ 不动 ✓）===== */
@@ -1863,6 +1902,8 @@ void handleRom() {
    *   scrUp 正常应当 < 60 秒（它是"这一分钟那一刻画的"✓）。*/
   j += "\"scrMin\":" + String((long)lastShownMin) + ",\"scrUp\":" +
        String((millis() - lastScreenAt) / 1000) + ",";
+  /* ★2026-09-30（新手向）：模块地址不对时（0x3C/0x3D）把它报出来 ⇒ 网页/脚本都能看到 ✓ */
+  j += "\"oledHint\":" + String(oledHintAddr) + ",";
   /* ---- 数据源预设 / 标题（2026-09-29 通用化时加，给新版网页的表单用 ✓）---- */
   j += "\"title\":\"" + jsonEsc(String(ext.title)) + "\",";
   j += "\"preset\":" + String(ext.preset) + ",\"presetName\":\"" + extPresetName() + "\",";
@@ -2205,7 +2246,18 @@ void startSTA() {
       WiFi.begin(cfg.ssid, cfg.pass);
     }
   }
-  if (WiFi.status() != WL_CONNECTED) { Serial.println("[WIFI] 失败 -> 配网模式"); startAP(); return; }
+  if (WiFi.status() != WL_CONNECTED) {
+    /* ★2026-09-30（新手向）：连不上是新手的第一道坎 ✗ ⇒ 把"该查什么"直接打出来 ✓✓
+     *   十有八九就三种：① 名字/密码写错（**大小写敏感**）② 用了 5G 频段（ESP8266 **只支持 2.4G** ✗）
+     *   ③ 信号太弱。原来只说一句"失败 -> 配网模式"，新手根本不知道该改什么 ✗ */
+    Serial.println("[WIFI] ✗ 连不上 ⇒ 进配网模式（热点名：" AP_PREFIX "<芯片号>）");
+    Serial.println("[WIFI]   请检查 config.h 里那三行：");
+    Serial.println("[WIFI]   ① WiFi 名/密码有没有写错（大小写敏感 ✓）");
+    Serial.println("[WIFI]   ② 必须是 **2.4G** 的 WiFi —— ESP8266 不支持 5G ✗");
+    Serial.println("[WIFI]   ③ 板子离路由器近一点（信号太弱也会连不上 ✓）");
+    Serial.println("[WIFI]   或者：手机连上那个热点，配网页面会自动弹出来让你填 WiFi ✓");
+    startAP(); return;
+  }
 
   bb.wifiMs = (uint16_t)(millis() - t0); bb.net = 1; bbSave();
   Serial.printf("[WIFI] OK ip=%s\n", WiFi.localIP().toString().c_str());
@@ -2301,6 +2353,12 @@ void startSTA() {
   announce(); lastAnnounce = millis();
   Serial.printf("\n[BOOT] %s %s build %s  http://%s/\n\n",
                 FW_NAME, FW_VERSION, FW_BUILD, WiFi.localIP().toString().c_str());
+  /* ★2026-09-30（新手向）：开机日志里直接写"下一步做什么" ✓
+   *   （原来只有一行 URL ✗ —— 新手不知道拿这个地址干什么 ✓）*/
+  Serial.println("→ 下一步：浏览器打开上面那个地址（手机/电脑连同一个 WiFi 就能开 ✓）");
+  if (!mon.host[0]) Serial.println("→ 还没配数据源：打开网页 →「监测设置」→ 填服务器与目录 → 保存 → 立即检查 ✓");
+  else              Serial.println("→ 想改设置：网页「监测设置」；想改标题/引脚：改 config.h 再重烧 ✓");
+  oledReady();                             // ★屏上亮几秒 IP —— 新手不用翻串口日志找 IP ✓✓
   /* ★2026-09-26：原来在这里**立刻** doCheck(true) ✗ —— TLS 握手要一大块连续堆，
    * 而刚开完服务器/OTA/UDP，堆正紧（黑匣子实测：阶段 7 Exception ✗）。
    * 改成**推迟 15 秒**、在主循环里做 ✓：那时系统已稳、也能先响应网页 ✓。 */

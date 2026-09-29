@@ -4,24 +4,28 @@
 ota.py —— ESP8266 OTA 底座「一键操作台」
 
 用法（在 serial-screen 目录下）：
-    python tools\\ota.py find              找板子（先查历史IP → 再扫网段 → 再听广播）
-    python tools\\ota.py build             编译（自动写入 FW_BUILD 时间戳）
-    python tools\\ota.py push              编译 + OTA 推送 + 校验固件真的换了  ← 日常就用这条
-    python tools\\ota.py pull              板子从本机 HTTP 拉固件（第三种通道）
-    python tools\\ota.py status            打印板子 /status
-    python tools\\ota.py serial [--sec 10] 看串口日志
-    python tools\\ota.py rescue            兜底：串口烧录（FT232，板子刷砖也能救）
-    python tools\\ota.py portal            配网指引（板子连不上时）
+    python tools/ota.py find              找板子（先查历史IP → 再扫网段 → 再听广播）
+    python tools/ota.py build             编译（自动写入 FW_BUILD 时间戳）
+    python tools/ota.py push              编译 + OTA 推送 + 校验固件真的换了  ← 日常就用这条
+    python tools/ota.py pull              板子从本机 HTTP 拉固件（第三种通道）
+    python tools/ota.py status            打印板子 /status
+    python tools/ota.py ports             列出系统串口（自动探测）
+    python tools/ota.py serial [--sec 10] 看串口日志
+    python tools/ota.py rescue            兜底：串口烧录（FT232，板子刷砖也能救）
+    python tools/ota.py portal            配网指引（板子连不上时）
 
-依赖：系统 python 的 pyserial（已装 3.5）、arduino-cli（tools\\arduino-cli）、ESP8266 core 3.1.2
+依赖：系统 python 的 pyserial（已装 3.5）、arduino-cli、ESP8266 core（版本任意，自动探测）
+      —— 跨平台：Windows / Linux / macOS 都能跑，路径不写死（见下面「工具链自动探测」一节）
 """
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import glob
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -38,13 +42,89 @@ except Exception:
     pass
 
 # ----------------------------------------------------------------- 路径与常量
-ROOT   = Path(__file__).resolve().parent.parent           # serial-screen\
-CLI    = ROOT / "tools" / "arduino-cli" / "arduino-cli.exe"
-CFG    = ROOT / "tools" / "arduino15" / "arduino-cli.yaml"
+# 跨平台：只用 pathlib，绝不用 "\\" 拼路径、绝不写死 .exe / 版本号 / 用户目录 ✓
+ROOT   = Path(__file__).resolve().parent.parent           # serial-screen/
 FWROOT = ROOT / "firmware"
 STATE  = FWROOT / "ota-state.json"
-ESPOTA = (ROOT / "tools" / "arduino15" / "packages" / "esp8266" / "hardware"
-          / "esp8266" / "3.1.2" / "tools" / "espota.py")
+
+# 工具链自动探测（延迟解析 + 缓存）：
+#   ①环境变量 ARDUINO_CLI / ARDUINO_CLI_CONFIG ②仓库内 tools/ 自带 ③PATH
+ARDUINO_CLI_URL = "https://arduino.github.io/arduino-cli/latest/installation/"
+
+_cli_cache = None
+
+
+def cli_path():
+    """找 arduino-cli —— 顺序：环境变量 → 仓库自带 → PATH → 报错（给官网链接，不静默失败 ✓）
+
+    注意：**不写死 `.exe`** —— Windows 叫 arduino-cli.exe，Linux/macOS 叫 arduino-cli，
+    用 shutil.which 让平台自己挑（which 在 Windows 上也会补 .exe/.cmd 后缀）✓"""
+    global _cli_cache
+    if _cli_cache:
+        return _cli_cache
+
+    cands = []
+    env = os.environ.get("ARDUINO_CLI")
+    if env:
+        cands.append(Path(env).expanduser())
+    bundled = ROOT / "tools" / "arduino-cli"
+    cands.append(bundled / "arduino-cli")          # 无后缀：Linux/macOS 的原生可执行
+    cands.append(bundled / "arduino-cli.exe")      # 无后缀那个在 Windows 上不存在，回退即可
+    for c in cands:
+        if c.is_file():
+            _cli_cache = c
+            return c
+
+    found = shutil.which("arduino-cli")            # PATH（含 arduino-cli.exe）
+    if found:
+        _cli_cache = Path(found)
+        return found
+
+    die("找不到 arduino-cli。三种装法任选：\n"
+        f"  ①装到 PATH：看官网 {ARDUINO_CLI_URL}\n"
+        f"  ②放进仓库：{bundled / 'arduino-cli'}（Windows 用 arduino-cli.exe）\n"
+        "  ③指定环境变量：export ARDUINO_CLI=/path/to/arduino-cli")
+
+
+def cli_cfg_args():
+    """本机专用的 arduino-cli.yaml 只在存在时才传 --config-file；
+    不存在就什么都不传 ⇒ 让 arduino-cli 用自己默认的配置（别人机器上没这个文件 ✓）"""
+    for p in (os.environ.get("ARDUINO_CLI_CONFIG"),
+              ROOT / "tools" / "arduino15" / "arduino-cli.yaml"):
+        if p and Path(p).expanduser().is_file():
+            return ["--config-file", str(Path(p).expanduser())]
+    return []
+
+
+_espota_cache = None
+
+
+def espota_path():
+    """找 espota.py —— 在 esp8266 core 目录下 glob 出**所有版本**，取版本号最高的那个 ✓
+    （以前写死 3.1.2：别人装 3.0.2 / 3.1.3 就直接找不到 ✗）"""
+    global _espota_cache
+    if _espota_cache:
+        return _espota_cache
+
+    pat = (ROOT / "tools" / "arduino15" / "packages" / "esp8266"
+           / "hardware" / "esp8266" / "*" / "tools" / "espota.py")
+    hits = [Path(p) for p in glob.glob(str(pat)) if Path(p).is_file()]
+
+    def ver_key(p):
+        """3.1.10 > 3.1.2（纯字符串比较会排反 ⇒ 按数字元组比）"""
+        v = p.parents[1].name
+        parts = tuple(int(n) for n in re.findall(r"\d+", v))
+        return (parts, v)
+
+    if hits:
+        _espota_cache = max(hits, key=ver_key)
+        return _espota_cache
+
+    die("找不到 espota.py（ESP8266 core 还没装）。先跑：\n"
+        "  arduino-cli core update-index\n"
+        "  arduino-cli core install esp8266:esp8266\n"
+        f"（默认会装到 {ROOT / 'tools' / 'arduino15' / 'packages' / 'esp8266'} 下）")
+
 
 SKETCH_NAME = None            # 由 --sketch 决定；没给就读 state，再退到 ota-base
 
@@ -85,7 +165,10 @@ OTA_PORT  = 8266              # ArduinoOTA 的端口（espota 用）
 UDP_PORT  = 4210              # 板子 UDP 广播播报的端口（必须 != OTA_PORT，否则会抢 OTA 握手包）
 HTTP_PORT = 8080
 BAUD      = 115200
-PREFER_PORT = os.environ.get("ROMWATCH_PORT", "COM5")   # FT232 那个口（换机器时用环境变量覆盖 ✓）
+# 串口默认「自动探测」：环境变量 ROMWATCH_PORT 优先（跨平台手指定端口用这个 ✓）
+#   Linux/macOS: export ROMWATCH_PORT=/dev/ttyUSB0     Windows: set ROMWATCH_PORT=COM5
+PREFER_PORT = os.environ.get("ROMWATCH_PORT")           # 可选；没给就自动探测
+USB_HINT = ("FTDI", "FT232", "CH340", "CP210", "USB Serial", "USB-SERIAL")
 
 # ----------------------------------------------------------------- 小工具
 def say(msg=""):
@@ -133,21 +216,59 @@ def save_state(**kw):
     STATE.write_text(json.dumps(st, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def find_port():
-    """优先 COM5；否则找 FTDI/CH340/USB Serial 的口。"""
+def list_ports():
+    """列出系统串口（跨平台）：
+       Windows  → pyserial 的 list_ports（就是 GetPortNames 的等价物 ✓）
+       Linux/macOS → glob('/dev/ttyUSB*' + '/dev/ttyACM*')，pyserial 在就再补充说明文字 ✓"""
+    out = []
     try:
-        from serial.tools import list_ports
+        from serial.tools import list_ports as lp
+        for p in lp.comports():
+            out.append({"device": p.device,
+                        "desc": (p.description or p.manufacturer or "").strip()})
     except Exception:
-        return PREFER_PORT
-    ports = list(list_ports.comports())
+        pass
+    if not out and os.name != "nt":
+        for g in ("/dev/ttyUSB*", "/dev/ttyACM*", "/dev/cu.usbserial*", "/dev/cu.usbmodem*"):
+            for d in sorted(glob.glob(g)):
+                out.append({"device": d, "desc": ""})
+    return out
+
+
+def find_port(required=False):
+    """串口优先级：①环境变量 ROMWATCH_PORT ②名字/描述像 FTDI/CH340/USB 的口 ③（仅 Windows）COM5
+    找不到时：required=True 报错并提示怎么指定，否则返回 None（让上层优雅降级 ✓）"""
+    ports = list_ports()
+
+    if PREFER_PORT:
+        for p in ports:
+            if p["device"].upper() == PREFER_PORT.upper():
+                return p["device"]
+        return PREFER_PORT                      # 环境变量指了就用它（哪怕现在没插上）
+
     for p in ports:
-        if p.device.upper() == PREFER_PORT:
-            return p.device
-    for p in ports:
-        desc = (p.description or "") + (p.manufacturer or "")
-        if any(k in desc for k in ("FTDI", "FT232", "CH340", "CP210", "USB Serial", "USB-SERIAL")):
-            return p.device
-    return PREFER_PORT
+        if any(k in p["desc"] for k in USB_HINT):
+            return p["device"]
+
+    if os.name == "nt":
+        for p in ports:                         # 老行为兜底：Windows 上默认 COM5 ✓
+            if p["device"].upper() == "COM5":
+                return p["device"]
+        return "COM5"
+
+    if len(ports) == 1:
+        return ports[0]["device"]
+    if len(ports) > 1:
+        say("🔌 探到多个串口，用 --port 或环境变量 ROMWATCH_PORT 指定要哪个：")
+        for p in ports:
+            say(f"   {p['device']}   {p['desc']}")
+        return None
+
+    if required:
+        die("没探到任何串口。插好 USB 转串口线再试，或显式指定：\n"
+            "   Linux/macOS: --port /dev/ttyUSB0   或   export ROMWATCH_PORT=/dev/ttyUSB0\n"
+            "   Windows:     --port COM5           或   set ROMWATCH_PORT=COM5")
+    return None
 
 
 # ----------------------------------------------------------------- find
@@ -209,6 +330,9 @@ def peek_serial(seconds=4):
     except Exception:
         return None
     port = find_port()
+    if not port:
+        say("（没探到串口，跳过串口找 IP）")
+        return None
     try:
         with serial.Serial(port, BAUD, timeout=0.3) as sp:
             say(f"🔌 串口 {port} 偷听 {seconds} 秒，找 IP …")
@@ -277,7 +401,7 @@ def cmd_build(args):
     build = sk_build()
     build.mkdir(parents=True, exist_ok=True)
     say(f"📦 工程：{sk_name()}   产物目录：{build}")
-    rc = run([CLI, "--config-file", CFG, "compile",
+    rc = run([cli_path(), *cli_cfg_args(), "compile",
               "--fqbn", FQBN,
               "--output-dir", build,
               sk_dir()]).returncode
@@ -296,10 +420,9 @@ def cmd_push(args):
     ip = cmd_find(argparse.Namespace(ip=args.ip, wait=8, serial_only=False))
     if not ip:
         die("找不到板子，没法推送")
-    if not ESPOTA.exists():
-        die(f"espota.py 不在：{ESPOTA}")
-    say(f"🚀 espota 推送 → {ip}:{OTA_PORT}   [{sk_name()}]")
-    rc = run([sys.executable, ESPOTA, "-i", ip, "-p", str(OTA_PORT),
+    espota = espota_path()
+    say(f"🚀 espota 推送 → {ip}:{OTA_PORT}   [{sk_name()}]   ({espota.parents[1].name})")
+    rc = run([sys.executable, espota, "-i", ip, "-p", str(OTA_PORT),
               "-a", ota_pass(), "-f", sk_bin()]).returncode
     if rc != 0:
         die("espota 推送失败")
@@ -398,8 +521,8 @@ def cmd_serial(args):
     try:
         import serial
     except Exception:
-        die("没有 pyserial")
-    port = args.port or find_port()
+        die("没有 pyserial（pip install pyserial）")
+    port = args.port or find_port(required=True)
     say(f"📖 串口 {port} @ {BAUD}（Ctrl-C 停）")
     with serial.Serial(port, BAUD, timeout=0.5) as sp:
         t0 = time.time()
@@ -411,11 +534,21 @@ def cmd_serial(args):
                 print(f"[{time.strftime('%H:%M:%S')}] {line}", flush=True)
 
 
+def cmd_ports(args):
+    ports = list_ports()
+    if not ports:
+        say("🔌 没探到串口（插好线再试；Linux 还要确认有 /dev/ttyUSB* 权限，通常要加入 dialout 组）")
+        return
+    say(f"🔌 探到 {len(ports)} 个串口：")
+    for p in ports:
+        say(f"   {p['device']}   {p['desc']}")
+
+
 def cmd_rescue(args):
-    port = args.port or find_port()
+    port = args.port or find_port(required=True)
     say(f"🆘 串口兜底烧录 → {port}")
     cmd_build(args)          # 总是重新编译：否则会把上一次的旧 bin 又刷一遍（踩过这个坑）
-    rc = run([CLI, "--config-file", CFG, "upload",
+    rc = run([cli_path(), *cli_cfg_args(), "upload",
               "-p", port, "--fqbn", FQBN, "--input-dir", sk_build(), sk_dir()]).returncode
     if rc != 0:
         die("串口烧录失败")
@@ -429,8 +562,10 @@ def cmd_portal(args):
   2. 手机/电脑连热点：OTABase-<芯片号>（开放热点，无密码）
   3. 浏览器打开：http://192.168.4.1/   （手机若弹"无网络"提示，选"仍然连接"）
   4. 选 WiFi + 填密码 → 保存并重启
-  5. 回到电脑跑：python tools\\ota.py find   → 应该能扫到
+  5. 回到电脑跑：python tools/ota.py find   → 应该能扫到
   备注：想重新配网，板子在 STA 模式下访问 http://<板子IP>/reset 即可清凭据重启
+  备注：串口找不到时先看有哪些口 —— python tools/ota.py ports
+        （Linux/macOS 例：/dev/ttyUSB0、/dev/ttyACM0；Windows 例：COM5）
 """)
 
 
@@ -479,6 +614,9 @@ def main():
     p = sub.add_parser("serial", help="看串口日志")
     p.add_argument("--port"); p.add_argument("--sec", type=int, default=0)
     p.set_defaults(func=cmd_serial)
+
+    p = sub.add_parser("ports", help="列出系统串口（自动探测用）")
+    p.set_defaults(func=cmd_ports)
 
     p = sub.add_parser("rescue", help="串口兜底烧录")
     p.add_argument("--port")

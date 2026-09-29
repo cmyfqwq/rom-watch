@@ -222,6 +222,11 @@ pre.box{margin:0 0 10px;background:var(--bg2);border:1px solid var(--line);borde
 pre.box:last-child{margin-bottom:0}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:12.5px;line-height:1.5}
 .hint{font-size:12.5px;color:var(--mut);margin:10px 0 0}
+/* ★2026-09-30（新手向）：还没配数据源时，顶上跳一条"先做这三步"的引导 ✓（JS 控制显隐 ✓）*/
+#setupHint{display:none;border:1px solid rgba(94,234,212,.45);background:rgba(94,234,212,.08);
+  border-radius:12px;padding:12px 14px;margin:0 0 14px;font-size:13.5px;line-height:1.65}
+#setupHint b{color:var(--acc)}
+#setupHint ol{margin:6px 0 0;padding-left:20px}
 .hint b{color:var(--fg)}
 a{color:var(--acc2);text-decoration:none}
 a:hover{text-decoration:underline}
@@ -324,6 +329,17 @@ static const char UI_BODY[] PROGMEM = R"HTMLBODY(
     <p class="ringcap" id="nextTxt">下次检查 —</p>
   </div>
 </section>
+
+<!-- ★2026-09-30（新手向）：只在"还没配数据源"时显示（JS 控制 ✓）——
+     原来没配数据源时，页面看起来一切正常、只是永远不报新版本 ✗ ⇒ 新手根本不知道要先配 ✓ -->
+<div id="setupHint">
+  <b>👋 第一次用？先做这三步：</b>
+  <ol>
+    <li>在下面「<b>监测设置</b>」里填 <b>服务器</b> 和 <b>目录</b>（盯网盘），或者选 GitHub 预设填 <code>OWNER/REPO</code></li>
+    <li>点「<b>保存设置</b>」</li>
+    <li>点「<b>立即检查</b>」—— 配好之后这条提示会自动消失 ✓</li>
+  </ol>
+</div>
 
 <details class="card howto" open>
   <summary title="三条就够：什么时候变红、刷完点什么、怎么让它马上去下载">怎么用（3 步）<span class="jr"> · 点这行可以收起</span></summary>
@@ -603,6 +619,8 @@ function render(j){
     document.title = 'rom-watch · ' + ttl;
     $('brandSub').textContent = ttl;
   }
+  /* ★2026-09-30（新手向）：还没配数据源 ⇒ 顶上跳"先做这三步"的引导 ✓（配好了自动消失 ✓）*/
+  $('setupHint').style.display = (j.host ? 'none' : 'block');
   /* ★报警灯那行要能自己解释（2026-09-29 主人报"有新版本怎么不会亮灯"⇒ 灯的状态必须看得见 ✓）*/
   if (j.ledAlarm)                 $('kLed').textContent = '常亮（有新版本没看过）';
   else if (j.hasNew)              $('kLed').textContent = '灭 · 你已摁过「我知道了」';
