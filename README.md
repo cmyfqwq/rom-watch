@@ -226,8 +226,10 @@ python tools/check_publish.py --list    # 顺便列出"会被提交的文件"清
 >
 > ★ **`.HMI` 那套工具已经单独拆出去了** ⇒ [**cmyfqwq/tjc-hmi-toolkit**](https://github.com/cmyfqwq/tjc-hmi-toolkit)
 > （国内：[Gitee 镜像](https://gitee.com/cmyfqwq/tjc-hmi-toolkit)）
-> —— 那边有更完整的**格式逆向说明**（容器 / 目录 / 页面 TLV / 控件 / 事件代码）、
-> 修好的**目录起点自动探测**，以及一份诚实的"还没弄清的地方"清单。本仓库这份是就地保留的副本。
+> **★哪份是"正版"**：以 **tjc-hmi-toolkit 那份为准** ✓ —— 本仓库这份是**就地保留的副本**
+> （因为作者的刷屏脚本 `screen-flash.ps1` 引用了这个路径）；**两边内容目前一致，改了要一起改** ✓
+> （2026-09-30 就漂过一次：toolkit 那边修好了"目录起点自动探测"和"GBK 控制台崩溃"，
+>  本仓库的副本还是旧的 ✗ ⇒ 已同步 ✓）
 
 ---
 

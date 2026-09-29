@@ -1,5 +1,7 @@
-# hmi_parse.py —— TJC .HMI 容器 + .pa 页面块 的正式解析器（2026-09-26）
-# 容器：目录项 28B 自 0x20 起：[名16B][偏移4B LE][长度4B LE][标志4B]
+# hmi_parse.py —— TJC .HMI 容器 + .pa 页面块 的正式解析器（2026-09-26；2026-09-30 修目录起点）
+# 容器：目录项 28B：[名16B][偏移4B LE][长度4B LE][标志4B]
+#   ★目录起点**不是固定值** ✗ —— 实测 4（新格式）/ 5（旧格式），详见 hmi_container.py；
+#     写死任一个都会**静默漏条目** ✗（本文件原来写死 0x20 ⇒ 新格式会丢第一条 main.HMI ✗）
 # 页面：68B 文件头 + TLV 序列；TLV = [4B 总长][载荷]，载荷 = 属性名 + 值
 #   · 属性块：载荷里先是明文属性名，值的小端数值写在载荷末尾（字符串也是末尾）
 #   · 组件块：以 att-N 开头，其后属性属于该组件，直到下一个 att-
@@ -11,21 +13,13 @@ ATTR_RE = re.compile(rb'([\x20-\x7e]{1,28})')
 KNOWN_PREFIX = (b'att-', b'codes')
 
 def parse_container(path):
-    d = open(path, 'rb').read()
-    ents = []
-    off = 0x20
-    for i in range(2000):
-        e = d[off + 28 * i: off + 28 * (i + 1)]
-        if len(e) < 28:
-            break
-        name = e[:16].split(b'\0')[0]
-        if not name:
-            continue
-        o, l, f = struct.unpack('<III', e[16:28])
-        if o == 0 and l == 0:
-            break
-        ents.append({'name': name.decode('latin1'), 'off': o, 'len': l, 'flag': f})
-    return d, ents
+    """★2026-09-30 修：改用 `hmi_container` 的**自动探测**（按连续性挑目录起点 ✓）
+    原来这里写死 `off = 0x20` ✗ —— 读新格式（魔数 `05 00 00 00`）的文件时
+    **会丢掉第一条目录项 `main.HMI`** ✗✓；而且 `if not name: continue` 在
+    "首条目名字首字节是 0x00"的文件上会把整张目录读错位 ✗。"""
+    import hmi_container
+    r = hmi_container.read(path)
+    return r['data'], r['entries']
 
 def tlv_iter(blob, start):
     pos = start

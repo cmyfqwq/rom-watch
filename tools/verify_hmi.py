@@ -37,6 +37,14 @@ import struct
 import sys
 from typing import Any
 
+# ★2026-09-30 修（发布前实测踩到）：中文 Windows 的控制台是 **GBK** ⇒
+#   脚本里那些 ✓/✗ 一打印就 `UnicodeEncodeError: 'gbk' codec can't encode character` ✗，
+#   而且**整个自检直接崩掉**（不是少打一个字符 ✗）。加这一句就稳了 ✓
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 # ---------------------------------------------------------------- 容器解析
 
 def read_container(path: str) -> dict[str, Any]:
