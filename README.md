@@ -27,7 +27,7 @@
 
 | 网页面板（手机） | OLED 128×64（默认） | OLED 128×32（小屏） |
 |:---:|:---:|:---:|
-| ![网页](docs/web-mobile.png) | ![oled64](docs/oled-128x64.png) | ![oled32](docs/oled-128x32.png) |
+| <img src="docs/web-mobile.png" width="230" alt="网页面板"> | <img src="docs/oled-128x64.png" width="330" alt="OLED 128×64"> | <img src="docs/oled-128x32.png" width="330" alt="OLED 128×32"> |
 
 ---
 
