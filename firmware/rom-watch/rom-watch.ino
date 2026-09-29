@@ -115,7 +115,8 @@
 #endif
 
 #define FW_NAME       "rom-watch"
-#define FW_VERSION    "0.3.1"
+#define FW_VERSION    "1.0.0"                 // ★2026-09-30：从 0.3.1 改成 1.0.0 —— 这是**第一个公开版本**
+                                              //   （原来那串是主人自己迭代的序号，不是"公开版号" ✓）
 /* OTA_PASSWORD 不在这里写死 —— 它是**可配的适配项**，见上面适配层的 #ifndef ✓ */
 #define AP_PREFIX     "ROMWatch-"
 #define ANNOUNCE_PORT 4210                 // 不能是 8266（ArduinoOTA 占着）
