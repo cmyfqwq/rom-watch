@@ -219,7 +219,7 @@ void handleReset() {
   ESP.restart();
 }
 
-// 拉取式 OTA：/pull?host=192.168.110.x&port=8080&path=/fw.bin
+// 拉取式 OTA：/pull?host=<你电脑的IP>&port=8080&path=/fw.bin
 void handlePull() {
   String host = server.arg("host");
   int    port = server.arg("port").toInt();
