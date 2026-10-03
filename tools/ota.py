@@ -99,16 +99,20 @@ def cli_cfg_args():
 _espota_cache = None
 
 
-def espota_path():
-    """找 espota.py —— 在 esp8266 core 目录下 glob 出**所有版本**，取版本号最高的那个 ✓
-    （以前写死 3.1.2：别人装 3.0.2 / 3.1.3 就直接找不到 ✗）"""
+def espota_path(fqbn: str = ""):
+    """找 espota.py —— 在 core 目录下 glob 出**所有版本**，取版本号最高的那个 ✓
+    （以前写死 3.1.2：别人装 3.0.2 / 3.1.3 就直接找不到 ✗）
+    ★2026-10-03 支持多平台：esp8266 与 esp32（S3/C3…）的包里**各带一份 espota.py**，
+      协议相同（ArduinoOTA ✓）⇒ 优先取 **FQBN 对应平台**的那份，否则取版本最高的 ✓"""
     global _espota_cache
     if _espota_cache:
         return _espota_cache
 
-    pat = (ROOT / "tools" / "arduino15" / "packages" / "esp8266"
-           / "hardware" / "esp8266" / "*" / "tools" / "espota.py")
-    hits = [Path(p) for p in glob.glob(str(pat)) if Path(p).is_file()]
+    pkgs = ROOT / "tools" / "arduino15" / "packages"
+    hits = []
+    for pat in (pkgs / "esp8266" / "hardware" / "esp8266" / "*" / "tools" / "espota.py",
+                pkgs / "esp32" / "hardware" / "esp32" / "*" / "tools" / "espota.py"):
+        hits += [Path(p) for p in glob.glob(str(pat)) if Path(p).is_file()]
 
     def ver_key(p):
         """3.1.10 > 3.1.2（纯字符串比较会排反 ⇒ 按数字元组比）"""
@@ -117,13 +121,20 @@ def espota_path():
         return (parts, v)
 
     if hits:
+        core = fqbn.split(":")[0].lower() if fqbn else ""
+        if core:                               # ★FQBN 指了平台 ⇒ 用那份（版本新旧无所谓 ✓）
+            same = [p for p in hits if core in str(p).lower()]
+            if same:
+                _espota_cache = max(same, key=ver_key)
+                return _espota_cache
         _espota_cache = max(hits, key=ver_key)
         return _espota_cache
 
-    die("找不到 espota.py（ESP8266 core 还没装）。先跑：\n"
+    die("找不到 espota.py（esp8266 / esp32 的 core 都没装）。先跑：\n"
         "  arduino-cli core update-index\n"
-        "  arduino-cli core install esp8266:esp8266\n"
-        f"（默认会装到 {ROOT / 'tools' / 'arduino15' / 'packages' / 'esp8266'} 下）")
+        "  arduino-cli core install esp8266:esp8266     # ESP8266 系列\n"
+        "  arduino-cli core install esp32:esp32         # ESP32 / S3 / C3 系列\n"
+        f"（默认会装到 {pkgs} 下）")
 
 
 SKETCH_NAME = None            # 由 --sketch 决定；没给就读 state，再退到 ota-base
@@ -419,14 +430,29 @@ def cmd_build(args):
 
 
 # ----------------------------------------------------------------- push
+def ota_port():
+    """★ArduinoOTA 的端口**随平台不同** ✗✓：ESP8266 是 **8266**，ESP32 是 **3232**
+    （2026-10-03 实测：对 ESP32-S3 用 8266 ⇒ `No response from the ESP` ✗；换 3232 ⇒ 一次成功 ✓）"""
+    return 3232 if FQBN.startswith("esp32") else OTA_PORT
+
+
 def cmd_push(args):
     stamp = cmd_build(args)
     ip = cmd_find(argparse.Namespace(ip=args.ip, wait=8, serial_only=False))
     if not ip:
         die("找不到板子，没法推送")
-    espota = espota_path()
-    say(f"🚀 espota 推送 → {ip}:{OTA_PORT}   [{sk_name()}]   ({espota.parents[1].name})")
-    rc = run([sys.executable, espota, "-i", ip, "-p", str(OTA_PORT),
+    # ★安全检查（2026-10-03 实测踩到 ✗✗）：**绝不要把 A 的固件推到 B 上**
+    #   经过：指定 --ip 指向 S3，但它的 /status 因 JSON bug 解析失败 ⇒ finder 退回"扫网段"⇒
+    #        扫到 8266 就当成目标 ⇒ **ESP32 的 bin 差点被推给 8266** ✗（幸好认证失败拦住了 ✓）
+    _info = board_status(ip) or {}
+    _bfw = (_info.get("fw") or "").strip()
+    if _bfw and _bfw != sk_name():
+        die(f"拒绝推送 ✗ 目标 {ip} 上跑的是「{_bfw}」，而你要推的是「{sk_name()}」\n"
+            f"  九成是 --ip 没生效、find 扫到别的板子了 ⇒ 用 `--ip <目标IP>` 明确指定 ✓")
+    espota = espota_path(FQBN)
+    port = ota_port()
+    say(f"🚀 espota 推送 → {ip}:{port}   [{sk_name()}]   ({espota.parents[1].name})")
+    rc = run([sys.executable, espota, "-i", ip, "-p", str(port),
               "-a", ota_pass(), "-f", sk_bin()]).returncode
     if rc != 0:
         die("espota 推送失败")
